@@ -1,0 +1,18 @@
+node_modules
+dist
+.env
+.env.local
+.DS_Store
+
+# Foundry
+contracts/out
+contracts/cache
+contracts/broadcast
+
+# do not commit concrete deployments or wallet addresses by default
+contracts/deployments/*.json
+!contracts/deployments/.gitkeep
+
+# synced artefacts that are regenerable
+frontend/src/contracts/*.abi.json
+frontend/src/contracts/addresses.json
