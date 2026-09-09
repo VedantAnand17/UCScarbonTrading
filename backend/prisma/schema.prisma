@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A provisioned ESP32 metering device. HMAC secret is stored encrypted
+// (not one-way hashed) because verifying an inbound signature requires
+// recomputing HMAC(payload, secret) server-side, which needs the raw
+// secret bytes — a one-way hash can't be used for that. Plaintext is
+// shown to the admin exactly once, at provisioning.
+model Device {
+  deviceId         String   @id
+  encryptedSecret  String
+  secretIv         String
+  label            String?
+  projectId        Int?
+  generatorAddress String?
+  ratedCapacityKw  Float
+  lastSeq          Int      @default(0)
+  status           String   @default("active") // "active" | "revoked"
+  createdAt        DateTime @default(now())
+
+  readings Reading[]
+}
+
+// One ingested meter reading. (deviceId, seq) is the idempotency key —
+// a duplicate POST hits this unique constraint and is treated as a
+// no-op success, never a double-processed reading.
+model Reading {
+  id              Int      @id @default(autoincrement())
+  deviceId        String
+  seq             Int
+  deviceTimestamp Int
+  receivedAt      DateTime @default(now())
+  kwhCumulative   Float
+  kwhInterval     Float
+  validated       Boolean
+  flagReason      String?
+  signature       String
+
+  // Mint bookkeeping — set only when validated=true. A reading can be
+  // validated but still have mintStatus "failed" (chain call reverted or
+  // RPC error) — the reading itself is never lost even if the mint is,
+  // so this is the durable record of which validated readings never made
+  // it on-chain and may need a manual/retried mint.
+  creditsAmount Int?
+  mintTxHash    String?
+  mintStatus    String? // "success" | "failed" | null (not attempted / not validated)
+  mintError     String?
+
+  device Device @relation(fields: [deviceId], references: [deviceId])
+
+  @@unique([deviceId, seq])
+}

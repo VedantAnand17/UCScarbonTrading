@@ -16,3 +16,6 @@ contracts/deployments/*.json
 # synced artefacts that are regenerable
 frontend/src/contracts/*.abi.json
 frontend/src/contracts/addresses.json
+
+# per-device provisioning secrets, never committed
+firmware/**/secrets.h

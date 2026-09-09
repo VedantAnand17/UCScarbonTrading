@@ -1,0 +1,10 @@
+{
+  "name": "ingest-stub",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local stub of POST /api/v1/ingest/reading for testing the ESP32 firmware",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
