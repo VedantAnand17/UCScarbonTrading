@@ -66,7 +66,7 @@ export default function Dashboard() {
         <div className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-semibold text-white">Latest projects</h2>
-            <Link to="/projects" className="text-sm text-slate-400 hover:text-white">
+            <Link to="/on-chain/projects" className="text-sm text-slate-400 hover:text-white">
               See all
             </Link>
           </div>
@@ -78,7 +78,7 @@ export default function Dashboard() {
               .map((p) => (
                 <Link
                   key={String(p.id)}
-                  to={`/projects/${p.id}`}
+                  to={`/on-chain/projects/${p.id}`}
                   className="card group p-5 transition-colors hover:border-leaf-500/30 hover:bg-leaf-500/[0.04]"
                 >
                   <div className="flex items-center justify-between">
@@ -136,10 +136,10 @@ export default function Dashboard() {
           spent. Each one is worth 1 tonne of CO₂.
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link to="/marketplace" className="btn-secondary">
+          <Link to="/on-chain/marketplace" className="btn-secondary">
             Browse the market <ArrowRight className="h-4 w-4" />
           </Link>
-          <Link to="/portfolio" className="btn-secondary">
+          <Link to="/on-chain/portfolio" className="btn-secondary">
             My credits
           </Link>
         </div>

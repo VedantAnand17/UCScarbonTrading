@@ -40,7 +40,7 @@ export function useRecentRetirements(limit = 10) {
   const details = useReadContracts({
     allowFailure: false,
     contracts: ids.map((id) => ({
-      abi: carbonCreditAbi as any,
+      abi: carbonCreditAbi,
       address: addresses!.carbonCredit,
       functionName: "getRetirement",
       args: [id],

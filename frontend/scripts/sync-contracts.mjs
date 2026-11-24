@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 const contractsDir = path.join(repoRoot, "contracts");
-const outDir = path.join(contractsDir, "out");
+const outDir = process.env.FORGE_OUT ? path.resolve(process.env.FORGE_OUT) : path.join(contractsDir, "out");
 const deploymentsDir = path.join(contractsDir, "deployments");
 const destDir = path.join(__dirname, "..", "src", "contracts");
 

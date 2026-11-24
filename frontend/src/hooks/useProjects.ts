@@ -45,7 +45,7 @@ export function useAllProjects() {
   const many = useReadContracts({
     allowFailure: false,
     contracts: idList.map((id) => ({
-      abi: projectRegistryAbi as any,
+      abi: projectRegistryAbi,
       address: addresses!.projectRegistry,
       functionName: "getProject",
       args: [id],
