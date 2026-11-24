@@ -7,6 +7,8 @@ describe("carbon units", () => {
     ["1", "0.001 kgCO₂e"],
     ["1250", "1.25 kgCO₂e"],
     ["1250000", "1.25 tCO₂e"],
+    ["3482650", "3.483 tCO₂e"],
+    ["1636017", "1.636 tCO₂e"],
     ["-400", "-0.4 kgCO₂e"],
   ])("displays %s integer grams as %s", (grams, expected) => {
     expect(formatCarbon(grams)).toBe(expected);

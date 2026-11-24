@@ -18,7 +18,9 @@ function formatGrams(grams: bigint, scale: bigint, digits: number) {
 export function formatCarbon(grams: Measurement) {
   const amount = BigInt(grams);
   if (amount >= 1_000_000n || amount <= -1_000_000n) {
-    return `${formatGrams(amount, 1_000_000n, 6)} tCO₂e`;
+    // Tonnes are shown to the nearest kilogram (3 decimals) to stay readable.
+    const half = amount < 0n ? -500n : 500n;
+    return `${formatGrams((amount + half) / 1_000n, 1_000n, 3)} tCO₂e`;
   }
   return `${formatGrams(amount, 1_000n, 3)} kgCO₂e`;
 }
