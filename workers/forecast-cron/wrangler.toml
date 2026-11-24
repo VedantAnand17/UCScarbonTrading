@@ -1,0 +1,33 @@
+name = "ucs-carbon-forecast"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[[containers]]
+class_name = "ForecastContainer"
+image = "./Dockerfile"
+image_build_context = "../.."
+instance_type = "basic"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "FORECAST_CONTAINER"
+class_name = "ForecastContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ForecastContainer"]
+
+[triggers]
+crons = ["30 18 * * *"]
+
+[observability]
+enabled = true
+
+[vars]
+FORECAST_API_URL = "https://api.carbon.vedant-dev.com"
+
+[secrets]
+required = ["CRON_TRIGGER_TOKEN", "FORECAST_API_EMAIL", "FORECAST_API_PASSWORD"]
