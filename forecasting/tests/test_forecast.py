@@ -55,3 +55,22 @@ def test_gradient_boosting_learns_a_repeating_solar_day():
     expected = profile[:24]
     assert mae(expected, pred) < 2.0
     assert pred[0] == 0.0  # midnight is forced to zero
+
+
+def test_publish_selects_a_model_that_beats_the_baseline_on_noisy_solar_days():
+    from ucs_forecast.publish import hourly_from_readings, select_and_forecast
+
+    rng = np.random.default_rng(1)
+    start = int(pd.Timestamp("2026-11-01").timestamp())
+    rows = []
+    for minute in range(0, 60 * 24 * 14, 15):
+        hour = (minute // 60) % 24
+        sun = max(0.0, np.sin((hour - 6) / 12 * np.pi))
+        rows.append((start + minute * 60, 10 * sun * rng.uniform(0.6, 1.0) / 4))
+    series = hourly_from_readings(rows)
+    assert series.index[-1] == pd.Timestamp("2026-11-14 22:00")  # trailing partial hour dropped
+    result = select_and_forecast(series)
+    assert len(result["forecast"]) == 24
+    assert result["mae"] <= result["baseline_mae"]
+    assert result["units_g"] == int(np.floor(result["total_kwh"] * 0.710 * 1000))
+    assert 0.0 <= result["confidence"] <= 1.0

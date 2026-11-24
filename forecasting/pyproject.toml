@@ -9,6 +9,7 @@ dependencies = [
   "scikit-learn>=1.5",
   "statsmodels>=0.14",
   "matplotlib>=3.9",
+  "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]
