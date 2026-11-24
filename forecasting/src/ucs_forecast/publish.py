@@ -155,7 +155,8 @@ def publish_postgres() -> None:
 
 
 def api_request(url: str, token: str | None = None, payload: dict | None = None):
-    headers = {"Accept": "application/json"}
+    # Cloudflare rejects the default urllib user agent, so identify the job explicitly.
+    headers = {"Accept": "application/json", "User-Agent": "ucs-forecast-job/1.0"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = None
