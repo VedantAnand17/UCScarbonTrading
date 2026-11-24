@@ -4,7 +4,7 @@ const ENC_ALGO = "aes-256-gcm";
 
 function getEncryptionKey() {
   const hex = process.env.DEVICE_SECRET_ENCRYPTION_KEY;
-  if (!hex || hex.length !== 64) {
+  if (!/^[a-f0-9]{64}$/i.test(hex || "")) {
     throw new Error(
       "DEVICE_SECRET_ENCRYPTION_KEY must be set to a 64-char hex string (32 bytes)"
     );

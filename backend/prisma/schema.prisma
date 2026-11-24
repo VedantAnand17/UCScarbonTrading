@@ -3,56 +3,219 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// A provisioned ESP32 metering device. HMAC secret is stored encrypted
-// (not one-way hashed) because verifying an inbound signature requires
-// recomputing HMAC(payload, secret) server-side, which needs the raw
-// secret bytes — a one-way hash can't be used for that. Plaintext is
-// shown to the admin exactly once, at provisioning.
+model Organisation {
+  id        String        @id @default(cuid())
+  name      String
+  createdAt DateTime      @default(now())
+  users     User[]
+  devices   Device[]
+  ledger    LedgerEntry[]
+  listings  Listing[]
+  purchases Trade[]       @relation("buyer")
+  sales     Trade[]       @relation("seller")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  name           String
+  roles          String[]
+  organisationId String
+  createdAt      DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+}
+
 model Device {
-  deviceId         String   @id
+  deviceId         String       @id
   encryptedSecret  String
   secretIv         String
   label            String?
   projectId        Int?
   generatorAddress String?
   ratedCapacityKw  Float
-  lastSeq          Int      @default(0)
-  status           String   @default("active") // "active" | "revoked"
-  createdAt        DateTime @default(now())
+  lastSeq          Int          @default(0)
+  status           String       @default("active")
+  createdAt        DateTime     @default(now())
+  organisationId   String
+  organisation     Organisation @relation(fields: [organisationId], references: [id])
+  readings         Reading[]
+  forecasts        Forecast[]
 
-  readings Reading[]
+  @@index([organisationId])
 }
 
-// One ingested meter reading. (deviceId, seq) is the idempotency key —
-// a duplicate POST hits this unique constraint and is treated as a
-// no-op success, never a double-processed reading.
 model Reading {
-  id              Int      @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   deviceId        String
   seq             Int
   deviceTimestamp Int
-  receivedAt      DateTime @default(now())
+  receivedAt      DateTime      @default(now())
   kwhCumulative   Float
   kwhInterval     Float
   validated       Boolean
   flagReason      String?
   signature       String
-
-  // Mint bookkeeping — set only when validated=true. A reading can be
-  // validated but still have mintStatus "failed" (chain call reverted or
-  // RPC error) — the reading itself is never lost even if the mint is,
-  // so this is the durable record of which validated readings never made
-  // it on-chain and may need a manual/retried mint.
-  creditsAmount Int?
-  mintTxHash    String?
-  mintStatus    String? // "success" | "failed" | null (not attempted / not validated)
-  mintError     String?
-
-  device Device @relation(fields: [deviceId], references: [deviceId])
+  creditsAmount   Int?
+  mintTxHash      String?
+  mintStatus      String?
+  mintError       String?
+  device          Device        @relation(fields: [deviceId], references: [deviceId])
+  ledgerEntries   LedgerEntry[]
 
   @@unique([deviceId, seq])
+  @@index([deviceId, deviceTimestamp])
+  @@index([validated, receivedAt])
+}
+
+model EmissionFactor {
+  id            String        @id @default(cuid())
+  version       String        @unique
+  kgPerKwh      Decimal       @db.Decimal(12, 9)
+  source        String
+  validFrom     DateTime
+  validTo       DateTime?
+  ledgerEntries LedgerEntry[]
+
+  @@index([validFrom])
+}
+
+enum LedgerKind {
+  MINT
+  RESERVE
+  RELEASE
+  TRANSFER_OUT
+  TRANSFER_IN
+  FEE
+}
+
+enum LedgerBucket {
+  AVAILABLE
+  RESERVED
+}
+
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  organisationId String
+  kind           LedgerKind
+  amountG        BigInt
+  bucket         LedgerBucket
+  readingId      Int?
+  listingId      String?
+  tradeId        String?
+  factorVersion  String?
+  createdAt      DateTime        @default(now())
+  organisation   Organisation    @relation(fields: [organisationId], references: [id], onUpdate: Restrict)
+  reading        Reading?        @relation(fields: [readingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  listing        Listing?        @relation(fields: [listingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trade          Trade?          @relation(fields: [tradeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  factor         EmissionFactor? @relation(fields: [factorVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([readingId, kind])
+  @@index([organisationId, bucket])
+  @@index([listingId])
+  @@index([tradeId])
+  @@index([factorVersion])
+}
+
+enum ListingStatus {
+  LISTED
+  CANCELLED
+  FILLED
+}
+
+model Listing {
+  id            String        @id @default(cuid())
+  sellerOrgId   String
+  amountG       BigInt
+  remainingG    BigInt
+  priceInrPerKg Decimal       @db.Decimal(18, 6)
+  status        ListingStatus @default(LISTED)
+  createdAt     DateTime      @default(now())
+  sellerOrg     Organisation  @relation(fields: [sellerOrgId], references: [id])
+  ledgerEntries LedgerEntry[]
+  trades        Trade[]
+
+  @@index([sellerOrgId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum TradeStatus {
+  SETTLED
+  ANCHOR_PENDING
+  ANCHORED
+  ANCHOR_FAILED
+}
+
+model Trade {
+  id            String        @id @default(cuid())
+  listingId     String
+  buyerOrgId    String
+  sellerOrgId   String
+  amountG       BigInt
+  priceInrPerKg Decimal       @db.Decimal(18, 6)
+  totalInr      Decimal       @db.Decimal(38, 9)
+  status        TradeStatus   @default(SETTLED)
+  tradeHash     String
+  settledAt     DateTime      @default(now())
+  listing       Listing       @relation(fields: [listingId], references: [id])
+  buyerOrg      Organisation  @relation("buyer", fields: [buyerOrgId], references: [id])
+  sellerOrg     Organisation  @relation("seller", fields: [sellerOrgId], references: [id])
+  anchor        Anchor?
+  ledgerEntries LedgerEntry[]
+
+  @@index([listingId])
+  @@index([buyerOrgId, settledAt])
+  @@index([sellerOrgId, settledAt])
+}
+
+enum AnchorStatus {
+  PENDING
+  INFLIGHT
+  CONFIRMED
+  FAILED
+}
+
+model Anchor {
+  id            String       @id @default(cuid())
+  tradeId       String       @unique
+  status        AnchorStatus @default(PENDING)
+  txHash        String?
+  blockNumber   BigInt?
+  attempts      Int          @default(0)
+  lastError     String?
+  updatedAt     DateTime     @updatedAt
+  nextAttemptAt DateTime     @default(now())
+  firstBlock    BigInt?
+  trade         Trade        @relation(fields: [tradeId], references: [id])
+
+  @@index([status, nextAttemptAt])
+}
+
+model Forecast {
+  id              String   @id @default(cuid())
+  deviceId        String
+  generatedAt     DateTime @default(now())
+  horizonStart    DateTime
+  horizonHours    Int
+  modelName       String
+  modelVersion    String
+  energyKwh       Json
+  avgKwh          Float
+  co2AvoidedKg    Float
+  unitsExpectedG  BigInt
+  maeKwh          Float
+  rmseKwh         Float
+  baselineMaeKwh  Float
+  baselineRmseKwh Float
+  confidence      Float
+  device          Device   @relation(fields: [deviceId], references: [deviceId])
+
+  @@index([deviceId, generatedAt])
 }
