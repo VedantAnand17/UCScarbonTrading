@@ -1,0 +1,7 @@
+**
+!forecasting/
+!forecasting/pyproject.toml
+!forecasting/uv.lock
+!forecasting/src/
+!forecasting/src/**
+**/__pycache__/

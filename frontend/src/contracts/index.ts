@@ -1,14 +1,13 @@
-import type { Address } from "viem";
+import type { Abi, Address } from "viem";
 import ProjectRegistryAbi from "./ProjectRegistry.abi.json";
 import CarbonCreditAbi from "./CarbonCredit.abi.json";
 import MarketplaceAbi from "./Marketplace.abi.json";
 import OffsetRouterAbi from "./OffsetRouter.abi.json";
-import addressesJson from "./addresses.json";
 
-export const projectRegistryAbi = ProjectRegistryAbi;
-export const carbonCreditAbi = CarbonCreditAbi;
-export const marketplaceAbi = MarketplaceAbi;
-export const offsetRouterAbi = OffsetRouterAbi;
+export const projectRegistryAbi = ProjectRegistryAbi as Abi;
+export const carbonCreditAbi = CarbonCreditAbi as Abi;
+export const marketplaceAbi = MarketplaceAbi as Abi;
+export const offsetRouterAbi = OffsetRouterAbi as Abi;
 
 export type DeployedAddresses = {
   projectRegistry: Address;
@@ -17,7 +16,11 @@ export type DeployedAddresses = {
   offsetRouter: Address;
 };
 
-const addresses = addressesJson as Record<string, DeployedAddresses>;
+const deployments = import.meta.glob<Record<string, DeployedAddresses>>("./addresses.json", {
+  eager: true,
+  import: "default",
+});
+const addresses = deployments["./addresses.json"] ?? {};
 
 /// Look up deployed addresses for a given chainId. Falls back to an env-overridden
 /// deployment on 11155111 (Sepolia) when provided via Vite env vars. Returns

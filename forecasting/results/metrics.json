@@ -1,0 +1,122 @@
+{
+  "plant1": {
+    "metrics": {
+      "seasonal_naive_24h": {
+        "label": "Seasonal naive (24 h)",
+        "mae_kwh": 1500.6,
+        "rmse_kwh": 2920.6,
+        "nmae_pct_of_mean_daylight": 13.53,
+        "nrmse_pct_of_mean_daylight": 26.33,
+        "daylight_mae_kwh": 2770.4,
+        "daily_energy_mape_pct": 12.09,
+        "mae_skill_vs_baseline_pct": 0.0,
+        "rmse_skill_vs_baseline_pct": 0.0
+      },
+      "sarima": {
+        "label": "SARIMA(1,0,1)(1,1,1)24",
+        "mae_kwh": 1363.4,
+        "rmse_kwh": 2429.2,
+        "nmae_pct_of_mean_daylight": 12.29,
+        "nrmse_pct_of_mean_daylight": 21.9,
+        "daylight_mae_kwh": 2496.4,
+        "daily_energy_mape_pct": 15.14,
+        "mae_skill_vs_baseline_pct": 9.1,
+        "rmse_skill_vs_baseline_pct": 16.8
+      },
+      "gradient_boosting": {
+        "label": "Gradient boosting",
+        "mae_kwh": 1553.3,
+        "rmse_kwh": 2915.7,
+        "nmae_pct_of_mean_daylight": 14.0,
+        "nrmse_pct_of_mean_daylight": 26.28,
+        "daylight_mae_kwh": 2867.6,
+        "daily_energy_mape_pct": 15.82,
+        "mae_skill_vs_baseline_pct": -3.5,
+        "rmse_skill_vs_baseline_pct": 0.2
+      },
+      "_meta": {
+        "test_hours": 168,
+        "daylight_hours": 91,
+        "mean_daylight_kwh": 11093.0,
+        "test_start": "2020-06-11 00:00:00",
+        "test_end": "2020-06-17 23:00:00"
+      }
+    },
+    "fit_seconds": {
+      "seasonal_naive_24h": 0.0,
+      "sarima": 24.95,
+      "gradient_boosting": 1.8
+    },
+    "example_last_day": {
+      "date": "2020-06-17",
+      "forecast_kwh": 144514.1,
+      "measured_kwh": 132711.2,
+      "forecast_avg_hourly_kwh": 6021.4,
+      "forecast_co2_avoided_kg": 102605.0,
+      "forecast_units_g": 102605019
+    }
+  },
+  "plant2": {
+    "metrics": {
+      "seasonal_naive_24h": {
+        "label": "Seasonal naive (24 h)",
+        "mae_kwh": 1320.5,
+        "rmse_kwh": 2368.5,
+        "nmae_pct_of_mean_daylight": 16.43,
+        "nrmse_pct_of_mean_daylight": 29.48,
+        "daylight_mae_kwh": 2437.9,
+        "daily_energy_mape_pct": 16.41,
+        "mae_skill_vs_baseline_pct": 0.0,
+        "rmse_skill_vs_baseline_pct": 0.0
+      },
+      "sarima": {
+        "label": "SARIMA(1,0,1)(1,1,1)24",
+        "mae_kwh": 1050.9,
+        "rmse_kwh": 1928.6,
+        "nmae_pct_of_mean_daylight": 13.08,
+        "nrmse_pct_of_mean_daylight": 24.0,
+        "daylight_mae_kwh": 1940.0,
+        "daily_energy_mape_pct": 15.79,
+        "mae_skill_vs_baseline_pct": 20.4,
+        "rmse_skill_vs_baseline_pct": 18.6
+      },
+      "gradient_boosting": {
+        "label": "Gradient boosting",
+        "mae_kwh": 1137.8,
+        "rmse_kwh": 2109.2,
+        "nmae_pct_of_mean_daylight": 14.16,
+        "nrmse_pct_of_mean_daylight": 26.25,
+        "daylight_mae_kwh": 2100.6,
+        "daily_energy_mape_pct": 14.99,
+        "mae_skill_vs_baseline_pct": 13.8,
+        "rmse_skill_vs_baseline_pct": 10.9
+      },
+      "_meta": {
+        "test_hours": 168,
+        "daylight_hours": 91,
+        "mean_daylight_kwh": 8035.5,
+        "test_start": "2020-06-11 00:00:00",
+        "test_end": "2020-06-17 23:00:00"
+      }
+    },
+    "fit_seconds": {
+      "seasonal_naive_24h": 0.0,
+      "sarima": 25.67,
+      "gradient_boosting": 1.69
+    },
+    "example_last_day": {
+      "date": "2020-06-17",
+      "forecast_kwh": 109032.3,
+      "measured_kwh": 93109.1,
+      "forecast_avg_hourly_kwh": 4543.0,
+      "forecast_co2_avoided_kg": 77412.9,
+      "forecast_units_g": 77412927
+    }
+  },
+  "_run": {
+    "dataset": "Solar Power Generation Data (Kannal, Kaggle 2020), Plants 1 and 2, India",
+    "resolution": "15-min inverter AC power aggregated to hourly plant energy",
+    "protocol": "rolling-origin day-ahead, last 7 days held out, retrained daily",
+    "python": "3.13.18"
+  }
+}

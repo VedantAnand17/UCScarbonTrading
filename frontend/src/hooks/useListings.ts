@@ -30,7 +30,7 @@ export function useActiveListings() {
   const many = useReadContracts({
     allowFailure: false,
     contracts: idList.map((id) => ({
-      abi: marketplaceAbi as any,
+      abi: marketplaceAbi,
       address: addresses!.marketplace,
       functionName: "getListing",
       args: [id],

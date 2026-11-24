@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -23,6 +23,11 @@ body {
     "Segoe UI",
     Roboto,
     sans-serif;
+  min-height: 100%;
+}
+
+.on-chain {
+  color-scheme: dark;
   background:
     radial-gradient(ellipse 80% 60% at 50% -10%, rgba(31, 189, 98, 0.18), transparent 60%),
     radial-gradient(ellipse 60% 40% at 100% 10%, rgba(18, 121, 65, 0.12), transparent 60%),

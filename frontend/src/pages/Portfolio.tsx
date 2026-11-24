@@ -33,8 +33,8 @@ function ApproveBanner() {
         onClick={() => {
           try {
             approve();
-          } catch (e: any) {
-            toast.error(e?.message ?? "Approval failed");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Approval failed");
           }
         }}
       >
@@ -229,8 +229,8 @@ function BalanceRow({ b, onAction }: { b: Balance; onAction: () => void }) {
                 onClick={() => {
                   try {
                     approve();
-                  } catch (e: any) {
-                    toast.error(e?.message ?? "Approval failed");
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Approval failed");
                   }
                 }}
               >

@@ -30,7 +30,7 @@ export default function ProjectDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/projects" className="btn-ghost -ml-2 text-sm">
+      <Link to="/on-chain/projects" className="btn-ghost -ml-2 text-sm">
         <ArrowLeft className="h-4 w-4" /> Back to projects
       </Link>
 

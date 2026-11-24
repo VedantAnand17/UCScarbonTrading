@@ -3,170 +3,114 @@ const prisma = require("../lib/prisma");
 const { canonicalPayload, decryptSecret, verifyHmac } = require("../lib/crypto");
 const { computeCreditsAmount } = require("../lib/credits");
 const { mintCredits } = require("../lib/chain");
+const { route, HttpError } = require("../lib/http");
+const { factorAt } = require("../lib/ledger");
+const { mintGrams, MAX_BIGINT } = require("../lib/quantities");
 
 const router = express.Router();
-
 const SAFETY_MARGIN = Number(process.env.INGEST_SAFETY_MARGIN || 1.5);
-// Used only for the very first reading from a device, where there is no
-// prior reading to derive an actual interval from.
 const DEFAULT_INTERVAL_HOURS = Number(process.env.INGEST_DEFAULT_INTERVAL_HOURS || 5 / 60);
+const isPositiveInt32 = (value) => Number.isInteger(value) && value > 0 && value <= 2147483647;
 
-function isValidPayloadShape(body) {
-  return (
-    body &&
-    typeof body.device_id === "string" &&
-    Number.isInteger(body.seq) &&
-    body.seq > 0 &&
-    Number.isInteger(body.timestamp) &&
-    typeof body.kwh_cumulative === "number" &&
-    typeof body.kwh_interval === "number" &&
-    typeof body.signature === "string"
-  );
+function validPayload(body) {
+  return body && typeof body.device_id === "string" && body.device_id.length > 0 &&
+    isPositiveInt32(body.seq) && isPositiveInt32(body.timestamp) &&
+    Number.isFinite(body.kwh_cumulative) && Number.isFinite(body.kwh_interval);
 }
 
-// POST /api/v1/ingest/reading
-// Processing order follows prd.md §4.2 — do not reorder, each step
-// assumes the previous passed. Plausibility validation scope follows
-// mvp-ingestion-decisions.md decision 6 ("minimum"): negative-delta
-// reject + rated-capacity spike check only. Non-monotonic-cumulative
-// detection and admin review queue are explicitly deferred to v2.
-router.post("/reading", async (req, res) => {
+async function plausibilityError(tx, device, body) {
+  if (body.kwh_interval < 0) return "negative kwh_interval";
+  if (body.kwh_cumulative < 0) return "negative kwh_cumulative";
+  const last = await tx.reading.findUnique({
+    where: { deviceId_seq: { deviceId: device.deviceId, seq: device.lastSeq } },
+  });
+  const trusted = last?.validated ? last : await tx.reading.findFirst({
+    where: { deviceId: device.deviceId, validated: true }, orderBy: { seq: "desc" },
+  });
+  if (trusted && body.kwh_cumulative < trusted.kwhCumulative) return "cumulative meter value decreased";
+
+  const hours = last
+    ? Math.max((body.timestamp - last.deviceTimestamp) / 3600, 1 / 3600)
+    : DEFAULT_INTERVAL_HOURS;
+  const maxKwh = device.ratedCapacityKw * hours * SAFETY_MARGIN;
+  if (body.kwh_interval > maxKwh) return `kwh_interval exceeds plausible maximum of ${maxKwh.toFixed(6)} kWh`;
+  return null;
+}
+
+router.post("/reading", route(async (req, res) => {
   const body = req.body;
-
-  // 1. Parse & schema-validate.
-  if (!isValidPayloadShape(body)) {
-    return res.status(400).json({ error: "malformed payload" });
+  if (!/^[a-f0-9]{64}$/i.test(typeof body?.signature === "string" ? body.signature : "")) {
+    throw new HttpError(401, "unauthorized");
   }
+  if (!validPayload(body)) throw new HttpError(400, "malformed payload");
 
-  // 2. Look up device. Unknown, revoked -> 401. Same status regardless
-  // of which, so we don't leak which devices exist.
   const device = await prisma.device.findUnique({ where: { deviceId: body.device_id } });
-  if (!device || device.status !== "active") {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  if (!device || device.status !== "active" || !verifyHmac(
+    canonicalPayload(body), decryptSecret(device.encryptedSecret, device.secretIv), body.signature,
+  )) throw new HttpError(401, "unauthorized");
 
-  // 3. Verify HMAC, constant-time compare.
-  const secret = decryptSecret(device.encryptedSecret, device.secretIv);
-  const payload = canonicalPayload(body);
-  if (!verifyHmac(payload, secret, body.signature)) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-
-  // 4. Replay check.
-  if (body.seq <= device.lastSeq) {
-    return res.status(409).json({ error: "duplicate or replayed seq" });
-  }
-
-  // 5. Plausibility validation (minimum scope — see decisions doc).
-  let validated = true;
-  let flagReason = null;
-
-  if (body.kwh_interval < 0) {
-    validated = false;
-    flagReason = "negative kwh_interval";
-  } else {
-    const lastReading = await prisma.reading.findFirst({
-      where: { deviceId: device.deviceId },
-      orderBy: { seq: "desc" },
-    });
-
-    const intervalHours = lastReading
-      ? Math.max((body.timestamp - lastReading.deviceTimestamp) / 3600, 1 / 3600)
-      : DEFAULT_INTERVAL_HOURS;
-
-    const maxPlausibleKwh = device.ratedCapacityKw * intervalHours * SAFETY_MARGIN;
-
-    if (body.kwh_interval > maxPlausibleKwh) {
-      validated = false;
-      flagReason = `kwh_interval ${body.kwh_interval} exceeds plausible max ${maxPlausibleKwh.toFixed(6)} (rated_capacity_kw=${device.ratedCapacityKw}, interval_hours=${intervalHours.toFixed(4)})`;
+  // The firmware signs the six-decimal values. Use that same precision for validation and ledger accounting.
+  body.kwh_cumulative = Number(body.kwh_cumulative.toFixed(6));
+  body.kwh_interval = Number(body.kwh_interval.toFixed(6));
+  const legacyMint = process.env.LEGACY_MINT_ENABLED === "true";
+  const reading = await prisma.$transaction(async (tx) => {
+    const [current] = await tx.$queryRaw`SELECT * FROM "Device" WHERE "deviceId" = ${body.device_id} FOR UPDATE`;
+    if (!current || current.status !== "active" || current.encryptedSecret !== device.encryptedSecret || current.secretIv !== device.secretIv) {
+      throw new HttpError(401, "unauthorized");
     }
-  }
+    if (body.seq <= current.lastSeq) throw new HttpError(409, "duplicate or replayed seq");
 
-  const creditsAmount = validated ? computeCreditsAmount(body.kwh_interval) : null;
-
-  // 6. Persist. Unique(deviceId, seq) is the idempotency backstop for
-  // a retried POST that gets past the seq > lastSeq check above (e.g.
-  // an exact retry of a reading that was flagged, not validated, so
-  // lastSeq wasn't bumped for it) — treat that race as 409, not 500.
-  let reading;
-  try {
-    reading = await prisma.reading.create({
-      data: {
-        deviceId: device.deviceId,
-        seq: body.seq,
-        deviceTimestamp: body.timestamp,
-        kwhCumulative: body.kwh_cumulative,
-        kwhInterval: body.kwh_interval,
-        validated,
-        flagReason,
-        signature: body.signature,
-        creditsAmount,
-      },
-    });
-  } catch (err) {
-    if (err.code === "P2002") {
-      return res.status(409).json({ error: "duplicate or replayed seq" });
+    let flagReason = await plausibilityError(tx, current, body);
+    let factor;
+    let amountG;
+    if (!flagReason && body.kwh_interval > 0) {
+      factor = await factorAt(tx, new Date(body.timestamp * 1000));
+      if (!factor) {
+        flagReason = "no emission factor applies at capture time";
+      } else {
+        amountG = mintGrams(body.kwh_interval, factor.kgPerKwh);
+        if (amountG > MAX_BIGINT) flagReason = "carbon amount exceeds supported range";
+      }
     }
-    throw err;
-  }
 
-  // Replay protection is about seq strictly increasing, independent of
-  // whether this particular reading was validated for minting — so
-  // lastSeq advances either way.
-  await prisma.device.update({
-    where: { deviceId: device.deviceId },
-    data: { lastSeq: body.seq },
+    const saved = await tx.reading.create({ data: {
+      deviceId: current.deviceId,
+      seq: body.seq,
+      deviceTimestamp: body.timestamp,
+      kwhCumulative: body.kwh_cumulative,
+      kwhInterval: body.kwh_interval,
+      validated: !flagReason,
+      flagReason,
+      signature: body.signature,
+      creditsAmount: !flagReason && legacyMint ? computeCreditsAmount(body.kwh_interval) : null,
+    } });
+    if (!flagReason && factor) {
+      await tx.ledgerEntry.create({ data: {
+        organisationId: current.organisationId, kind: "MINT", bucket: "AVAILABLE",
+        amountG, readingId: saved.id, factorVersion: factor.version,
+      } });
+    }
+    await tx.device.update({ where: { deviceId: current.deviceId }, data: { lastSeq: body.seq } });
+    return { saved, current };
   });
 
-  // 7. Mint credits — validated readings only, per
-  // mvp-ingestion-decisions.md decisions 1/4/8. Deliberately NOT awaited
-  // before responding: Sepolia confirmation (~12s+ block time) is well
-  // past the firmware's HTTP_TIMEOUT_MS (5s) — awaiting here would make
-  // the ESP32 see a successful ingest as a client-side timeout and retry
-  // a reading the backend already accepted. The reading itself is
-  // already durably persisted above regardless of what happens to the
-  // mint; mint outcome is recorded on the Reading row for later
-  // reconciliation, not surfaced synchronously to the device.
-  mintForReading(device, reading, validated, creditsAmount, flagReason).catch((err) => {
-    console.error(`Unexpected error in mintForReading device=${device.deviceId} seq=${body.seq}`, err);
-  });
-
-  return res.status(200).json({ status: "accepted", validated, creditsAmount });
-});
-
-async function mintForReading(device, reading, validated, creditsAmount, flagReason) {
-  if (!validated || !creditsAmount) {
-    console.log(`Reading flagged, not minted: device=${device.deviceId} seq=${reading.seq} reason=${flagReason}`);
-    return;
+  if (!reading.saved.validated) throw new HttpError(422, reading.saved.flagReason);
+  if (legacyMint && reading.saved.creditsAmount > 0) {
+    mintLegacyCredit(reading.current, reading.saved).catch(() => console.error(`Failed to record mint outcome for reading ${reading.saved.id}`));
   }
+  res.json({ status: "accepted", validated: true, creditsAmount: reading.saved.creditsAmount });
+}));
 
-  if (!device.projectId || !device.generatorAddress) {
-    await prisma.reading.update({
-      where: { id: reading.id },
-      data: { mintStatus: "failed", mintError: "device not bound to a project/generatorAddress" },
-    });
-    console.log(`Mint skipped: device=${device.deviceId} seq=${reading.seq} not bound to project/generator`);
-    return;
-  }
-
+async function mintLegacyCredit(device, reading) {
+  let result;
   try {
-    const { txHash } = await mintCredits({
-      projectId: device.projectId,
-      to: device.generatorAddress,
-      amount: creditsAmount,
-    });
-    await prisma.reading.update({
-      where: { id: reading.id },
-      data: { mintStatus: "success", mintTxHash: txHash },
-    });
-    console.log(`Minted: device=${device.deviceId} seq=${reading.seq} amount=${creditsAmount} tx=${txHash}`);
+    if (!device.projectId || !device.generatorAddress) throw new Error("device not bound to a project/generatorAddress");
+    const { txHash } = await mintCredits({ projectId: device.projectId, to: device.generatorAddress, amount: reading.creditsAmount });
+    result = { mintStatus: "success", mintTxHash: txHash };
   } catch (err) {
-    await prisma.reading.update({
-      where: { id: reading.id },
-      data: { mintStatus: "failed", mintError: String(err.message || err) },
-    });
-    console.error(`Mint FAILED: device=${device.deviceId} seq=${reading.seq}`, err);
+    result = { mintStatus: "failed", mintError: err.shortMessage || err.message };
   }
+  await prisma.reading.update({ where: { id: reading.id }, data: result });
 }
 
 module.exports = router;
