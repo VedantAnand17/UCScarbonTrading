@@ -75,3 +75,29 @@ Errors are `{error: string}` with 400, 401, 403, 404, 409 or 422.
 
 `npm run seed` creates three organisations (two solar generators and one buyer), one admin, users with password `demo1234`, devices, three weeks of hourly readings from a daily solar profile scaled by plant capacity with cloud cover and noise, the posted ledger entries, a few listings and settled trades.
 Demo logins: `generator@demo.in`, `buyer@demo.in`, `admin@demo.in`.
+
+## Backend contract details
+
+- The API serializes Prisma `BigInt` and `Decimal` values as base-10 strings so grams, block numbers, and prices keep their precision.
+  Gram inputs accept positive integer strings or safe JSON integers.
+- `GET /trades/mine` also accepts `GENERATOR` so sellers can read their organisation's trades.
+  The shared trade and verification lookups are scoped to a participant's organisation or an administrator.
+- `POST /admin/devices` accepts `{label?, projectId?, generatorAddress?, ratedCapacityKw, organisationId?}` and uses the administrator's organisation when `organisationId` is omitted.
+  The response preserves the provisioning fields `{device_id, device_secret, warning}`.
+- `POST /admin/emission-factors` accepts `{version, kgPerKwh, source, validFrom, validTo?}` with ISO dates.
+  Ingestion uses the most recent effective factor at capture time and records the version on each MINT.
+- Generator energy reports use capture time in UTC, and the device's `lastSeenAt` is the most recent received reading's server timestamp.
+  `GET /generator/forecast` returns one latest forecast per device that has one.
+- An implausible signed reading is stored as flagged, consumes its sequence, and returns `422` with `{error}`.
+  Retrying that sequence returns `409` so the existing firmware can advance its buffer.
+  The `creditsAmount` in successful ingestion responses refers to the optional legacy ERC1155 mint and is `null` when it is disabled.
+  Unexpected server failures return `500` with the same error shape.
+- Trade hashing uses UTF-8 JSON with keys ordered `amountG`, `buyerOrgId`, `id`, `listingId`, `priceInrPerKg`, `sellerOrgId`, `settledAt`, `status`, `totalInr`.
+  The hash uses `SETTLED` for status, UTC ISO format for `settledAt`, and base-10 strings for the amount and both monetary values.
+  The on-chain key is `keccak256` of the UTF-8 trade ID.
+- A settled trade enters the anchor queue as `PENDING`.
+  Verification returns `onChainHash: null` and `match: false` until a hash is available from the configured contract.
+  `GET /trades/:id` returns `explorerUrl: null` until the anchor is confirmed.
+- PostgreSQL has a new migration baseline, including the default emission factor.
+  The old SQLite migrations are archived in `backend/prisma/sqlite-migrations` for reference.
+  Importing historical SQLite rows requires mapping each device to an organisation.
