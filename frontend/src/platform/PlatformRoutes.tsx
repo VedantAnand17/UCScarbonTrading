@@ -22,12 +22,18 @@ const workspaces = [
 
 const workspaceHome = (user: User) => workspaces.find(({ role }) => user.roles.includes(role))?.to;
 
+/** A post-sign-in return path is honoured only when the user may open it. */
+const canOpen = (user: User, path: string) =>
+  workspaces.every(({ role, to }) => !(path === to || path.startsWith(`${to}/`) || path.startsWith(`${to}?`)) || user.roles.includes(role));
+
 function SignInRoute() {
   const { token, identity } = useAuth();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from;
   if (token && identity.isPending) return <Loading label="Restoring session" />;
-  if (token && identity.data) return <Navigate to={from || "/"} replace />;
+  if (token && identity.data) {
+    return <Navigate to={from && canOpen(identity.data, from) ? from : "/"} replace />;
+  }
   return <Login />;
 }
 

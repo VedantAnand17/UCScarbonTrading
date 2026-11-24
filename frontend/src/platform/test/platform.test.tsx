@@ -76,6 +76,13 @@ describe("platform access", () => {
     expect(screen.getByRole("link", { name: "Go to your workspace" })).toHaveAttribute("href", "/buyer");
   });
 
+  it("sends a sign-in from another role's page to the user's own workspace", async () => {
+    const user = visit("/admin");
+    await signIn(user);
+    expect(await screen.findByRole("heading", { name: "Carbon marketplace" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Access restricted" })).not.toBeInTheDocument();
+  });
+
   it("offers every workspace permitted by a multi-role account", async () => {
     server.use(http.post(`${api}/auth/login`, () => HttpResponse.json({
       token: "multi-token", user: { ...buyer, roles: ["BUYER", "GENERATOR", "ADMIN"] },
