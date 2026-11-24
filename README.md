@@ -149,12 +149,31 @@ forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 
 ```bash
 cd frontend
-cp .env.example .env
-# set VITE_SEPOLIA_RPC_URL; optionally set VITE_WALLETCONNECT_PROJECT_ID
-npm install
-npm run sync:contracts     # pulls ABIs + addresses from ../contracts
-npm run dev                # http://localhost:5173
+npm ci
+VITE_MOCK_API=true npm run dev
 ```
+
+Open http://localhost:5183 and sign in as `generator@demo.in`, `buyer@demo.in`, or `admin@demo.in` with the password `demo1234`.
+Mock mode provides sample readings, forecasts, trades, and verification results.
+Changes made in mock mode reset when you reload the page.
+
+For the real REST API, omit `VITE_MOCK_API` and set `VITE_API_URL` to the backend origin without the `/api/v1` suffix.
+When `VITE_API_URL` is empty, the app requests `/api/v1` on its own origin, and Vite proxies requests to port 4000 during development.
+
+```bash
+npm test
+npm run lint
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+### Wallet-based tools
+
+The existing Ethereum marketplace, portfolio, projects, and contract administration live under `/on-chain`.
+Set `VITE_SEPOLIA_RPC_URL` to your RPC endpoint and `VITE_WALLETCONNECT_PROJECT_ID` if you use WalletConnect.
+Run `npm run sync:contracts` after deploying the contracts to import your deployment addresses.
 
 ### How the frontend finds the contracts
 
@@ -163,7 +182,7 @@ npm run dev                # http://localhost:5173
 1. Extracts the ABIs from `contracts/out/<Name>.sol/<Name>.json` into `frontend/src/contracts/<Name>.abi.json`.
 2. Merges every `contracts/deployments/<chainId>.json` into a single `frontend/src/contracts/addresses.json` keyed by chainId.
 
-When you switch the connected wallet to a network (e.g. Sepolia = 11155111), the app looks up addresses by chainId and renders the platform.
+When you switch the connected wallet to a network (e.g. Sepolia = 11155111), the on-chain tools look up addresses by chain ID.
 
 If you need to override addresses without re-running the sync script (e.g. you only want to test against an already-deployed Sepolia instance), set these in `frontend/.env`:
 
@@ -172,6 +191,7 @@ VITE_CHAIN_ID=11155111
 VITE_PROJECT_REGISTRY=0x...
 VITE_CARBON_CREDIT=0x...
 VITE_MARKETPLACE=0x...
+VITE_OFFSET_ROUTER=0x...
 ```
 
 ### Production build
@@ -185,7 +205,7 @@ npm run preview
 
 ## 3. End-to-end walkthrough
 
-After deploying (with `SEED=1`) and syncing, connect your wallet on Sepolia and:
+After deploying (with `SEED=1`) and syncing, open `/on-chain` and connect your wallet on Sepolia:
 
 1. **Dashboard** — see aggregate stats (projects, tonnes issued, tonnes retired, active listings).
 2. **Projects** — browse the two seeded projects and open either for detail (methodology, vintage, metadata URI, developer, issuance/retirement counters).

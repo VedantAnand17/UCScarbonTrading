@@ -62,7 +62,7 @@ export default function Projects() {
           {filtered.map((p) => (
             <Link
               key={String(p.id)}
-              to={`/projects/${p.id}`}
+              to={`/on-chain/projects/${p.id}`}
               className="card group flex flex-col gap-4 p-5 transition-colors hover:border-leaf-500/30 hover:bg-leaf-500/[0.04]"
             >
               <div className="flex items-start justify-between">

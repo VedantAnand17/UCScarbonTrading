@@ -1,24 +1,26 @@
-import { Routes, Route } from "react-router-dom";
-import Layout from "./components/Layout";
-import Dashboard from "./pages/Dashboard";
-import Projects from "./pages/Projects";
-import ProjectDetail from "./pages/ProjectDetail";
-import Marketplace from "./pages/Marketplace";
-import Portfolio from "./pages/Portfolio";
-import Admin from "./pages/Admin";
+import { lazy, Suspense } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { PlatformRoutes } from "./platform/PlatformRoutes";
+
+const OnChainApp = lazy(() => import("./OnChainApp"));
+
+function LegacyOnChainRedirect() {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate to={`/on-chain${pathname}${search}${hash}`} replace />;
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="projects/:id" element={<ProjectDetail />} />
-        <Route path="marketplace" element={<Marketplace />} />
-        <Route path="portfolio" element={<Portfolio />} />
-        <Route path="admin" element={<Admin />} />
-        <Route path="*" element={<Dashboard />} />
-      </Route>
+      <Route path="on-chain/*" element={
+        <Suspense fallback={<main className="route-loading" role="status">Loading on-chain tools…</main>}>
+          <OnChainApp />
+        </Suspense>
+      } />
+      <Route path="projects/*" element={<LegacyOnChainRedirect />} />
+      <Route path="marketplace" element={<LegacyOnChainRedirect />} />
+      <Route path="portfolio" element={<LegacyOnChainRedirect />} />
+      <Route path="*" element={<PlatformRoutes />} />
     </Routes>
   );
 }

@@ -26,7 +26,7 @@ export function useUserBalances() {
   const balances = useReadContracts({
     allowFailure: false,
     contracts: ids.map((id) => ({
-      abi: carbonCreditAbi as any,
+      abi: carbonCreditAbi,
       address: addresses!.carbonCredit,
       functionName: "balanceOf",
       args: [user!, id],
@@ -89,7 +89,7 @@ export function useUserRetirements() {
   const many = useReadContracts({
     allowFailure: false,
     contracts: idList.map((id) => ({
-      abi: carbonCreditAbi as any,
+      abi: carbonCreditAbi,
       address: addresses!.carbonCredit,
       functionName: "getRetirement",
       args: [id],

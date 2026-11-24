@@ -4,20 +4,20 @@ import { Leaf, Recycle, Store, FolderKanban, Wallet, Settings } from "lucide-rea
 import { useIsOwner } from "@/hooks/useIsOwner";
 
 const navItems = [
-  { to: "/", label: "Buy & spend", icon: Recycle, end: true },
-  { to: "/marketplace", label: "Market", icon: Store },
-  { to: "/projects", label: "Projects", icon: FolderKanban },
-  { to: "/portfolio", label: "My credits", icon: Wallet },
+  { to: "/on-chain", label: "Buy & spend", icon: Recycle, end: true },
+  { to: "/on-chain/marketplace", label: "Market", icon: Store },
+  { to: "/on-chain/projects", label: "Projects", icon: FolderKanban },
+  { to: "/on-chain/portfolio", label: "My credits", icon: Wallet },
 ];
 
 export default function Layout() {
   const { isOwner } = useIsOwner();
 
   return (
-    <div className="min-h-screen">
+    <div className="on-chain min-h-screen">
       <header className="sticky top-0 z-30 border-b border-white/5 bg-slate-950/70 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2">
+        <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link to="/on-chain" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-leaf-500/15 ring-1 ring-leaf-500/30">
               <Leaf className="h-4 w-4 text-leaf-400" />
             </div>
@@ -29,7 +29,7 @@ export default function Layout() {
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="order-last flex w-full flex-wrap items-center gap-1 lg:order-none lg:w-auto">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
@@ -50,7 +50,7 @@ export default function Layout() {
             ))}
             {isOwner && (
               <NavLink
-                to="/admin"
+                to="/on-chain/admin"
                 className={({ isActive }) =>
                   [
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
@@ -66,7 +66,10 @@ export default function Layout() {
             )}
           </nav>
 
-          <ConnectButton chainStatus="icon" accountStatus="address" showBalance={false} />
+          <div className="flex items-center gap-3">
+            <Link to="/" className="text-sm text-leaf-300 hover:text-white">Platform</Link>
+            <ConnectButton chainStatus="icon" accountStatus="address" showBalance={false} />
+          </div>
         </div>
       </header>
 
