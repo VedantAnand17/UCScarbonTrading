@@ -1,24 +1,26 @@
 """Nightly forecasting job (Algorithm 4 in the report).
 
-For every active device it reads validated readings from PostgreSQL, aggregates
+For every active device it reads validated readings from PostgreSQL or the Worker, aggregates
 them to hourly energy, backtests each model day-ahead on the most recent
 BACKTEST_DAYS days, and keeps a model only if it beats the seasonal-naive
 baseline on MAE. The chosen model is refitted on all data and its next-24-hour
 forecast is stored in the "Forecast" table together with its errors.
 
-Run: DATABASE_URL=postgresql://... uv run python -m ucs_forecast.publish
+Run with DATABASE_URL for PostgreSQL, or pass --api URL for the Worker.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
-import psycopg
 
 from .metrics import EMISSION_FACTOR_KG_PER_KWH, mae, rmse, units_grams
 from .models import HORIZON, MODELS
@@ -38,8 +40,10 @@ def hourly_from_readings(rows: list[tuple[int, float]]) -> pd.Series:
 
 
 def select_and_forecast(series: pd.Series) -> dict:
-    days = series.index.normalize().unique()
-    test_days = days[-(BACKTEST_DAYS + 1) : -1] if len(days) > BACKTEST_DAYS + 1 else days[-2:-1]
+    days = pd.DatetimeIndex(series.index).normalize().unique()
+    # The gradient booster needs a training row with both 24 h and 48 h lags.
+    earliest = series.index[0] + pd.Timedelta(hours=49)
+    test_days = days[:-1][days[:-1] >= earliest][-BACKTEST_DAYS:]
     actual, preds = [], {name: [] for name in MODELS}
     for day in test_days:
         history = series[series.index < day]
@@ -81,7 +85,46 @@ MODEL_LABELS = {
 }
 
 
-def main() -> None:
+def build_forecast(device_id: str, rows: list[tuple[int, float]]) -> dict | None:
+    if len(rows) < 24 * 4:
+        print(f"{device_id}: not enough history ({len(rows)} readings), skipped")
+        return None
+    hourly = hourly_from_readings(rows)
+    if len(hourly) < 24 * 4:
+        print(f"{device_id}: not enough hourly history ({len(hourly)} hours), skipped")
+        return None
+    result = select_and_forecast(hourly)
+    return {
+        "id": f"fc_{uuid.uuid4().hex[:20]}",
+        "deviceId": device_id,
+        "generatedAt": datetime.now(UTC),
+        "horizonStart": result["horizon_start"].to_pydatetime().replace(tzinfo=UTC),
+        "horizonHours": HORIZON,
+        "modelName": MODEL_LABELS[result["model"]],
+        "modelVersion": MODEL_VERSION,
+        "energyKwh": result["forecast"],
+        "avgKwh": result["avg_kwh"],
+        "co2AvoidedKg": result["co2_kg"],
+        "unitsExpectedG": result["units_g"],
+        "maeKwh": result["mae"],
+        "rmseKwh": result["rmse"],
+        "baselineMaeKwh": result["baseline_mae"],
+        "baselineRmseKwh": result["baseline_rmse"],
+        "confidence": result["confidence"],
+    }
+
+
+def report(forecast: dict) -> None:
+    print(
+        f"{forecast['deviceId']}: {forecast['modelName']} "
+        f"MAE {forecast['maeKwh']:.3f} vs baseline {forecast['baselineMaeKwh']:.3f} kWh, "
+        f"next {HORIZON} h {forecast['avgKwh'] * HORIZON:.2f} kWh"
+    )
+
+
+def publish_postgres() -> None:
+    import psycopg
+
     url = os.environ["DATABASE_URL"].split("?")[0]
     with psycopg.connect(url) as conn:
         devices = conn.execute(
@@ -93,41 +136,84 @@ def main() -> None:
                    WHERE "deviceId" = %s AND validated ORDER BY "deviceTimestamp" """,
                 (device_id,),
             ).fetchall()
-            if len(rows) < 24 * 4:
-                print(f"{device_id}: not enough history ({len(rows)} readings), skipped")
+            forecast = build_forecast(device_id, rows)
+            if forecast is None:
                 continue
-            result = select_and_forecast(hourly_from_readings(rows))
             conn.execute(
                 """INSERT INTO "Forecast" (id, "deviceId", "generatedAt", "horizonStart",
                    "horizonHours", "modelName", "modelVersion", "energyKwh", "avgKwh",
                    "co2AvoidedKg", "unitsExpectedG", "maeKwh", "rmseKwh", "baselineMaeKwh",
                    "baselineRmseKwh", confidence)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (
-                    f"fc_{uuid.uuid4().hex[:20]}",
-                    device_id,
-                    datetime.now(UTC),
-                    result["horizon_start"].to_pydatetime().replace(tzinfo=UTC),
-                    HORIZON,
-                    MODEL_LABELS[result["model"]],
-                    MODEL_VERSION,
-                    json.dumps(result["forecast"]),
-                    result["avg_kwh"],
-                    result["co2_kg"],
-                    result["units_g"],
-                    result["mae"],
-                    result["rmse"],
-                    result["baseline_mae"],
-                    result["baseline_rmse"],
-                    result["confidence"],
-                ),
+                   VALUES (%(id)s, %(deviceId)s, %(generatedAt)s, %(horizonStart)s, %(horizonHours)s,
+                   %(modelName)s, %(modelVersion)s, %(energyKwh)s, %(avgKwh)s, %(co2AvoidedKg)s,
+                   %(unitsExpectedG)s, %(maeKwh)s, %(rmseKwh)s, %(baselineMaeKwh)s,
+                   %(baselineRmseKwh)s, %(confidence)s)""",
+                {**forecast, "energyKwh": json.dumps(forecast["energyKwh"])},
             )
-            print(
-                f"{device_id}: {MODEL_LABELS[result['model']]} "
-                f"MAE {result['mae']:.3f} vs baseline {result['baseline_mae']:.3f} kWh, "
-                f"next 24 h {result['total_kwh']:.2f} kWh"
-            )
+            report(forecast)
         conn.commit()
+
+
+def api_request(url: str, token: str | None = None, payload: dict | None = None):
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload, allow_nan=False).encode()
+    with urlopen(Request(url, data=data, headers=headers), timeout=30) as response:
+        return json.load(response)
+
+
+def publish_api(url: str) -> None:
+    base = url.rstrip("/")
+    if not base.endswith("/api/v1"):
+        base += "/api/v1"
+    token = os.environ.get("FORECAST_API_TOKEN")
+    if not token:
+        token = api_request(
+            f"{base}/auth/login",
+            payload={
+                "email": os.environ["FORECAST_API_EMAIL"],
+                "password": os.environ["FORECAST_API_PASSWORD"],
+            },
+        )["token"]
+
+    devices = api_request(f"{base}/admin/devices", token)
+    for device in devices:
+        if device["status"] != "active":
+            continue
+        device_id = device["deviceId"]
+        rows = []
+        params = {"deviceId": device_id}
+        while True:
+            page = api_request(f"{base}/admin/readings?{urlencode(params)}", token)
+            rows.extend((row["deviceTimestamp"], row["kwhInterval"]) for row in page["readings"])
+            if page["nextCursor"] is None:
+                break
+            params["cursor"] = page["nextCursor"]
+        forecast = build_forecast(device_id, rows)
+        if forecast is None:
+            continue
+        wire_row = {
+            **forecast,
+            "generatedAt": forecast["generatedAt"].isoformat(),
+            "horizonStart": forecast["horizonStart"].isoformat(),
+            "unitsExpectedG": str(forecast["unitsExpectedG"]),
+        }
+        api_request(f"{base}/admin/forecasts", token, {"rows": [wire_row]})
+        report(forecast)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api", metavar="URL", help="Worker origin or /api/v1 base URL")
+    args = parser.parse_args(argv)
+    if args.api:
+        publish_api(args.api)
+    else:
+        publish_postgres()
 
 
 if __name__ == "__main__":

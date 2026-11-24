@@ -52,11 +52,11 @@ def _lag_features(series: pd.Series, index: pd.DatetimeIndex) -> pd.DataFrame:
 
 def gradient_boosting(history: pd.Series, horizon: int = HORIZON, seed: int = 0) -> np.ndarray:
     """Direct day-ahead gradient boosting on calendar and >=24 h lag features."""
-    train_index = history.index[history.notna()]
+    train_index = pd.DatetimeIndex(history.index[history.notna()])
     X_train = _lag_features(history, train_index)
     y_train = history.loc[train_index]
     keep = X_train[["lag24", "lag48"]].notna().all(axis=1)
-    X_train, y_train = X_train[keep], y_train[keep]
+    X_train, y_train = X_train[keep].dropna(axis=1, how="all"), y_train[keep]
 
     model = HistGradientBoostingRegressor(
         max_iter=400,
@@ -71,7 +71,7 @@ def gradient_boosting(history: pd.Series, horizon: int = HORIZON, seed: int = 0)
         history.index[-1] + pd.Timedelta(hours=1), periods=horizon, freq="h"
     )
     X_test = _lag_features(history, target_index)
-    pred = model.predict(X_test)
+    pred = model.predict(X_test[X_train.columns])
     # Night hours: the plant cannot generate when it produced nothing at that
     # hour on each of the previous three days.
     night = (X_test[["lag24", "lag48", "lag72"]].fillna(0) == 0).all(axis=1).to_numpy()

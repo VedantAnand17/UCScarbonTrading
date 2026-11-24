@@ -1,0 +1,33 @@
+name = "ucs-carbon-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+# routes = [{ pattern = "api.carbon.vedant-dev.com", custom_domain = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ucs-carbon"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true
+
+[vars]
+ANCHOR_RPC_URL = ""
+TRADE_ANCHOR_ADDRESS = ""
+ANCHOR_DEPLOYMENT_BLOCK = "0"
+INGEST_SAFETY_MARGIN = "1.5"
+INGEST_DEFAULT_INTERVAL_HOURS = "0.08333333333333333"
+
+LEGACY_MINT_ENABLED = "false"
+EMISSION_FACTOR_KG_PER_KWH = "0.71"
+DEMO_AMPLIFY = "100"
+DEMO_MIN_CREDITS = "1"
+CARBON_CREDIT_ADDRESS = "0x84aA28FFd384B6503a4A29CB998dD36DcfcDf140"
+SEPOLIA_RPC_URL = ""
+
+[secrets]
+required = ["JWT_SECRET", "DEVICE_SECRET_ENCRYPTION_KEY", "ANCHOR_PRIVATE_KEY"]

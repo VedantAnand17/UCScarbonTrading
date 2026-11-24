@@ -1,0 +1,36 @@
+{
+  "name": "ucs-carbon-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "types": "wrangler types --include-runtime false --strict-vars false",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed:sql": "node scripts/seed.mjs",
+    "seed:local": "wrangler d1 migrations apply DB --local && npm run seed:sql && wrangler d1 execute DB --local --file=demo-seed.sql --json > .wrangler/demo-seed-result.json",
+    "pretypecheck": "npm run types"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "decimal.js": "^10.6.0",
+    "hono": "^4.13.21",
+    "viem": "^2.58.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/workers-types": "^5.20261124.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.167.0"
+  },
+  "overrides": {
+    "@cloudflare/vitest-pool-workers": {
+      "miniflare": {
+        "workerd": "1.20261123.1"
+      }
+    },
+    "zod": "4.6.7"
+  }
+}
