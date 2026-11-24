@@ -37,3 +37,13 @@ export const formatInr = (value: Measurement) => rupees.format(Number(value));
 export const formatDate = (value: string) => date.format(new Date(value));
 export const formatDateTime = (value: string) => dateTime.format(new Date(value));
 export const shortId = (value: string) => value.length > 17 ? `${value.slice(0, 8)}…${value.slice(-5)}` : value;
+
+/** Turns backend validation reasons into sentence-case labels for people. */
+export function formatFlagReason(reason: string | null | undefined) {
+  if (!reason) return "Validation flagged";
+  const text = reason
+    .replace(/\bkwh_interval\b/gi, "energy interval")
+    .replaceAll("_", " ")
+    .replace(/\b(\d+\.\d*?)0+\b/g, (_, n: string) => n.replace(/\.$/, ""));
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}

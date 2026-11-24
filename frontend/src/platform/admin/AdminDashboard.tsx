@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, Clock3, Radio, RefreshCw, Repeat2, Timer, Wallet } from "lucide-react";
 import { useAuth, usePlatformQuery, useRefresh } from "../auth";
-import { formatDateTime, formatNumber } from "../format";
+import { formatDateTime, formatFlagReason, formatNumber } from "../format";
 import type { AdminOverview, Trade } from "../types";
 import { Empty, InlineError, Metrics, PageHeading, Panel, QueryContent, TradeList } from "../ui";
 import { AdminDevices } from "./Devices";
@@ -71,7 +71,7 @@ function FlaggedReadings() {
           {readings.map((reading) => (
             <li key={reading.id}>
               <div>
-                <strong>{reading.flagReason?.replaceAll("_", " ") || "Validation flagged"}</strong>
+                <strong>{formatFlagReason(reading.flagReason)}</strong>
                 <span className="record-meta">{reading.deviceId} · Reading {reading.seq}</span>
                 <span className="record-meta">{formatDateTime(reading.receivedAt)}</span>
               </div>

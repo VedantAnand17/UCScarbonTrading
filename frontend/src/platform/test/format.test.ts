@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCarbon, formatInr, kilogramsToGrams } from "../format";
+import { formatCarbon, formatFlagReason, formatInr, kilogramsToGrams } from "../format";
 
 describe("carbon units", () => {
   it.each([
@@ -22,5 +22,15 @@ describe("carbon units", () => {
 
   it("uses INR with Indian digit grouping", () => {
     expect(formatInr("123456.50")).toBe("₹1,23,456.50");
+  });
+});
+
+describe("flag reasons", () => {
+  it.each([
+    ["kwh_interval exceeds plausible maximum of 0.125000 kWh", "Energy interval exceeds plausible maximum of 0.125 kWh"],
+    ["cumulative meter value decreased", "Cumulative meter value decreased"],
+    [null, "Validation flagged"],
+  ])("formats %s", (reason, expected) => {
+    expect(formatFlagReason(reason)).toBe(expected);
   });
 });
